@@ -1,0 +1,14 @@
+*.swp
+*.sdf
+*.suo
+*.opensdf
+*.user
+*.so
+*.so.*
+build/*
+tests/*.txt
+tests/*.dll
+tests/*.exe
+tests/*.bin
+tests/*.so
+tests/*.
