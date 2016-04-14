@@ -1,0 +1,9 @@
+[submodule "dependencies/libsodium"]
+	path = dependencies/libsodium
+	url = https://github.com/soulik/libsodium.git
+[submodule "dependencies/mbedtls"]
+	path = dependencies/mbedtls
+	url = https://github.com/ARMmbed/mbedtls.git
+[submodule "dependencies/libzmq"]
+	path = dependencies/libzmq
+	url = https://github.com/zeromq/libzmq.git
