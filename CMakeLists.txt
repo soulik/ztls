@@ -127,3 +127,5 @@ add_subdirectory(src)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY build)
 set_target_properties(ztls PROPERTIES PREFIX "")
+
+add_subdirectory(tests)

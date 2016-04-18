@@ -29,16 +29,6 @@
 
 #include <zmq.h>
 
-#if (BUILDING_ZTLS || ztls_EXPORTS) && HAVE_VISIBILITY
-#define ZTLS_DLL_EXPORTED __attribute__((visibility("default")))
-#elif (BUILDING_ZTLS || ztls_EXPORTS) && defined _MSC_VER
-#define ZTLS_DLL_EXPORTED __declspec(dllexport)
-#elif defined _MSC_VER
-#define ZTLS_DLL_EXPORTED __declspec(dllimport)
-#else
-#define ZTLS_DLL_EXPORTED
-#endif
-
 #ifndef _MSC_VER
 
 #define _alloca	alloca
