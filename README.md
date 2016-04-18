@@ -13,7 +13,7 @@ All ztls endpoint use PAIR socket type. Keep in mind that ztls core runs in its 
 
 ## Building
 
-This project make a heavy use of C++11 features (lambdas, threads, ...) so make sure that your compiler supports them.
+This project makes a heavy use of C++11 features (lambdas, threads, ...) so make sure that your compiler supports them.
 
 ## API
 * Initializers - return ztls context object pointer
