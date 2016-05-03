@@ -1,9 +1,9 @@
 set(ztls_src
 	main.cpp
-	main.hpp
 	common.hpp
-	ztls.cpp
+	ztls_client.cpp
 	ztls.hpp
+	ztls_private.hpp
 )
 
 set(ztls_sources
@@ -25,6 +25,8 @@ ENDIF(UNIX)
 add_library(ztls SHARED
 	${ztls_sources}
 )
+
+add_definitions(-D_CRT_SECURE_NO_WARNINGS)
 
 set_property(TARGET ztls PROPERTY CXX_STANDARD 11)
 set_property(TARGET ztls PROPERTY CXX_STANDARD_REQUIRED ON)

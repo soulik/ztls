@@ -27,10 +27,3 @@
 	OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#include <zmq.h>
-
-#ifndef _MSC_VER
-
-#define _alloca	alloca
-
-#endif
