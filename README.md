@@ -21,6 +21,8 @@ You can build ztls with cmake build tool.
 ## API
 * Initializers - return ztls context object pointer
 
+> Note: Use _ztls_client_new_with_ctx_ version for _inproc_ transport to share ZeroMQ context between threads.
+
 ``void * ztls_client_new(const char * endpoint_out, const char * endpoint_control);``
 
 ``void * ztls_client_new_with_ctx(void * zmq_context, const char * endpoint_out, const char * endpoint_control);``
