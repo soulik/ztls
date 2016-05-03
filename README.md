@@ -7,9 +7,10 @@ This project allows you to interconnect ZeroMQ network stack with SSL/TLS encryp
 
 All ztls endpoint use PAIR socket type. Keep in mind that ztls core runs in its own thread.
 
-* Input endpoint - usually connected to STREAM socket type - e.g.: HTTPS, IMAPs, POP3s service
 * Output endpoint - used to get/send data from/to the service
 * Control endpoint (hidden at the moment) - used to manage proxy
+
+A the moment there's only client side. Server side will come along in near future.
 
 ## Building
 
@@ -20,17 +21,21 @@ You can build ztls with cmake build tool.
 ## API
 * Initializers - return ztls context object pointer
 
-``void * ztls_client_init(const char * endpoint_in, const char * endpoint_out);``
+``void * ztls_client_new(const char * endpoint_out, const char * endpoint_control);``
 
-``void * ztls_client_init_with_ctx(void * zmq_context, const char * endpoint_in, const char * endpoint_out);``
+``void * ztls_client_new_with_ctx(void * zmq_context, const char * endpoint_out, const char * endpoint_control);``
 
 * Set SSL/TLS connection host
 
-``bool ztls_client_connect(void * state, const char * hostname, char * error_message = nullptr, size_t max_error_message_length = 0);``
+``bool ztls_client_connect(void * state, const char * hostname, uint16_t port);``
+
+* Set CA chain to allow certificate validation (expects PEM/DER format)
+
+``bool ztls_client_CA_chain(void * state, const char * buffer, size_t len);``
 
 * Send client initiated close command over SSL/TLS
 
-``bool ztls_client_close(void * state, char * error_message = nullptr, size_t max_error_message_length = 0);``
+``bool ztls_client_close(void * state);``
 
 * Destroy ztls context
 
