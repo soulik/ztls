@@ -23,20 +23,22 @@ inline string sprintf_ex(const string & fmt, ...){
 
 inline int send_data(void * socket, const void * data, size_t len){
 	zmq_msg_t msg;
-	assert(zmq_msg_init_size(&msg, len) == 0);
+	int rc = zmq_msg_init_size(&msg, len);
+	assert(rc == 0);
 	memcpy(zmq_msg_data(&msg), data, len);
-	int rc = 0;
-	assert((rc = zmq_msg_send(&msg, socket, 0)) > 0);
+	rc = zmq_msg_send(&msg, socket, 0);
+	assert(rc >= 0);
 	zmq_msg_close(&msg);
 	return rc;
 }
 
 inline int send_data_more(void * socket, const void * data, size_t len){
 	zmq_msg_t msg;
-	assert(zmq_msg_init_size(&msg, len) == 0);
+	int rc = zmq_msg_init_size(&msg, len);
+	assert(rc == 0);
 	memcpy(zmq_msg_data(&msg), data, len);
-	int rc = 0;
-	assert((rc = zmq_msg_send(&msg, socket, ZMQ_SNDMORE)) > 0);
+	rc = zmq_msg_send(&msg, socket, ZMQ_SNDMORE);
+	assert(rc >= 0);
 	zmq_msg_close(&msg);
 	return rc;
 }
@@ -44,9 +46,11 @@ inline int send_data_more(void * socket, const void * data, size_t len){
 inline int recv_data(void * socket, function<int(char * data, size_t len)> process_input){
 	zmq_msg_t msg;
 
-	assert(zmq_msg_init(&msg) == 0);
-	assert(zmq_msg_recv(&msg, socket, 0) >= 0);
-	int rc = process_input(reinterpret_cast<char*>(zmq_msg_data(&msg)), zmq_msg_size(&msg));
+	int rc = zmq_msg_init(&msg);
+	assert(rc == 0);
+	rc = zmq_msg_recv(&msg, socket, 0);
+	assert(rc >= 0);
+	rc = process_input(reinterpret_cast<char*>(zmq_msg_data(&msg)), zmq_msg_size(&msg));
 	zmq_msg_close(&msg);
 
 	return rc;
@@ -69,17 +73,27 @@ public:
 
 http_test::http_test(){
 	ctx = zmq_ctx_new();
-	ztls_state = ztls_client_new_with_ctx(ctx, "inproc://https_data", "inproc://ztls_control");
+	string data_endpoint = "inproc://https_data";
+	string control_endpoint = "inproc://ztls_control";
+
+	ztls_state = ztls_client_new_with_ctx(ctx, data_endpoint.c_str(), control_endpoint.c_str());
 	
 	socket = zmq_socket(ctx, ZMQ_PAIR);
 	control_socket = zmq_socket(ctx, ZMQ_PAIR);
 
-	int linger = 2000;
-	assert(zmq_setsockopt(socket, ZMQ_LINGER, &linger, sizeof(linger)) == 0);
-	assert(zmq_setsockopt(socket, ZMQ_LINGER, &linger, sizeof(linger)) == 0);
+	assert(socket);
+	assert(control_socket);
 
-	assert(zmq_connect(socket, "inproc://https_data") == 0);
-	assert(zmq_connect(control_socket, "inproc://ztls_control") == 0);
+	int linger = 2000;
+	int rc = zmq_setsockopt(socket, ZMQ_LINGER, &linger, sizeof(linger));
+	assert(rc == 0);
+	rc = zmq_setsockopt(socket, ZMQ_LINGER, &linger, sizeof(linger));
+	assert(rc == 0);
+
+	rc = zmq_connect(socket, data_endpoint.c_str());
+	assert(rc == 0);
+	rc = zmq_connect(control_socket, control_endpoint.c_str());
+	assert(rc == 0);
 
 	memset(poll_items, 0, sizeof(zmq_pollitem_t) * 2);
 	poll_items[0].socket = socket;
@@ -87,10 +101,14 @@ http_test::http_test(){
 }
 
 http_test::~http_test(){
-	assert(zmq_close(control_socket) == 0);
-	assert(zmq_close(socket) == 0);
+	int rc = zmq_close(control_socket);
+	assert(rc == 0);
+
+	rc = zmq_close(socket);
+	assert(rc == 0);
 	ztls_client_destroy(ztls_state);
-	assert(zmq_ctx_term(ctx) == 0);
+	rc = zmq_ctx_term(ctx);
+	assert(rc == 0);
 }
 
 void http_test::process_control_message(void * socket){

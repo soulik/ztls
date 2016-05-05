@@ -172,20 +172,22 @@ namespace ztls {
 
 	inline int send_data(void * socket, const void * data, size_t len){
 		zmq_msg_t msg;
-		assert(zmq_msg_init_size(&msg, len) == 0);
+		int rc = zmq_msg_init_size(&msg, len);
+		assert(rc == 0);
 		memcpy(zmq_msg_data(&msg), data, len);
-		int rc = 0;
-		assert((rc = zmq_msg_send(&msg, socket, 0)) >= 0);
+		rc = zmq_msg_send(&msg, socket, 0);
+		assert(rc >= 0);
 		zmq_msg_close(&msg);
 		return rc;
 	}
 
 	inline int send_data_more(void * socket, const void * data, size_t len){
 		zmq_msg_t msg;
-		assert(zmq_msg_init_size(&msg, len) == 0);
+		int rc = zmq_msg_init_size(&msg, len);
+		assert(rc == 0);
 		memcpy(zmq_msg_data(&msg), data, len);
-		int rc = 0;
-		assert((rc = zmq_msg_send(&msg, socket, ZMQ_SNDMORE)) > 0);
+		rc = zmq_msg_send(&msg, socket, ZMQ_SNDMORE);
+		assert(rc >= 0);
 		zmq_msg_close(&msg);
 		return rc;
 	}
@@ -193,9 +195,11 @@ namespace ztls {
 	inline int recv_data(void * socket, function<int(char * data, size_t len)> process_input){
 		zmq_msg_t msg;
 
-		assert(zmq_msg_init(&msg) == 0);
-		assert(zmq_msg_recv(&msg, socket, 0) >= 0);
-		int rc = process_input(reinterpret_cast<char*>(zmq_msg_data(&msg)), zmq_msg_size(&msg));
+		int rc = zmq_msg_init(&msg);
+		assert(rc == 0);
+		rc = zmq_msg_recv(&msg, socket, 0);
+		assert(rc >= 0);
+		rc = process_input(reinterpret_cast<char*>(zmq_msg_data(&msg)), zmq_msg_size(&msg));
 		zmq_msg_close(&msg);
 
 		return rc;

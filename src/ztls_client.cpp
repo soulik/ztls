@@ -121,17 +121,26 @@ namespace ztls {
 		memset(&zmq_poll_out, 0, sizeof(zmq_pollitem_t));
 		memset(&zmq_poll_control, 0, sizeof(zmq_pollitem_t));
 
-		assert(zmq_socket_in = zmq_socket(zmq_context, ZMQ_STREAM));
-		assert(zmq_socket_out = zmq_socket(zmq_context, ZMQ_PAIR));
+		zmq_socket_in = zmq_socket(zmq_context, ZMQ_STREAM);
+		zmq_socket_out = zmq_socket(zmq_context, ZMQ_PAIR);
+
+		assert(zmq_socket_in);
+		assert(zmq_socket_out);
 
 		int linger = ZTLS_MAX_LINGER;
-		assert(zmq_setsockopt(zmq_socket_in, ZMQ_LINGER, &linger, sizeof(linger)) == 0);
-		assert(zmq_setsockopt(zmq_socket_out, ZMQ_LINGER, &linger, sizeof(linger)) == 0);
+		int rc = zmq_setsockopt(zmq_socket_in, ZMQ_LINGER, &linger, sizeof(linger));
+		assert(rc == 0);
+		rc = zmq_setsockopt(zmq_socket_out, ZMQ_LINGER, &linger, sizeof(linger));
+		assert(rc == 0);
 
 		if (endpoint_control){
-			assert(zmq_socket_control = zmq_socket(zmq_context, ZMQ_PAIR));
-			assert(zmq_setsockopt(zmq_socket_control, ZMQ_LINGER, &linger, sizeof(linger)) == 0);
-			assert(zmq_bind(zmq_socket_control, endpoint_control) == 0);
+			zmq_socket_control = zmq_socket(zmq_context, ZMQ_PAIR);
+			assert(zmq_socket_control);
+			rc = zmq_setsockopt(zmq_socket_control, ZMQ_LINGER, &linger, sizeof(linger));
+			assert(rc == 0);
+			rc = zmq_bind(zmq_socket_control, endpoint_control);
+			assert(rc == 0);
+
 			zmq_poll_control.socket = zmq_socket_control;
 			zmq_poll_control.events = ZMQ_POLLIN;
 		}
@@ -175,7 +184,8 @@ namespace ztls {
 
 		const string endpoint = sprintf_ex("tcp://%s:%u", hostname.c_str(), port);
 
-		assert(zmq_connect(zmq_socket_in, endpoint.c_str()) == 0);
+		int rc = zmq_connect(zmq_socket_in, endpoint.c_str());
+		assert(rc == 0);
 
 		if (connection_state == ztls_connection_state::ZTLS_DISCONNECTED){
 			if (process_state_change()){
@@ -192,7 +202,8 @@ namespace ztls {
 				close();
 				return false;
 			}{
-				assert(zmq_bind(zmq_socket_out, endpoint_out.c_str()) == 0);
+				int rc = zmq_bind(zmq_socket_out, endpoint_out.c_str());
+				assert(rc == 0);
 				transport_running = true;
 				data_transport = thread([&](){
 					while (transport_running){
@@ -233,6 +244,7 @@ namespace ztls {
 	}
 
 	bool ztls_client_state::process_state_change(){
+		zmq_poll_in.socket = zmq_socket_in;
 		zmq_poll_in.events = ZMQ_POLLIN;
 		int result = zmq_poll(&zmq_poll_in, 1, -1);
 		if (result > 0){

@@ -1,7 +1,7 @@
 ﻿#include "common.hpp"
 #include "ztls.hpp"
 #include "ztls_private.hpp"
-
+#include <iostream>
 using namespace ztls;
 
 void * ztls_client_new(const char * endpoint_out, const char * endpoint_control){
@@ -18,6 +18,7 @@ void * ztls_client_new_with_ctx(void * zmq_context, const char * endpoint_out, c
 bool ztls_client_connect(void * _state, const char * hostname, uint16_t port){
 	assert(_state);
 	assert(hostname);
+	assert(port > 0);
 	ztls_client_state * state = reinterpret_cast<ztls_client_state*>(_state);
 	return state->connect(hostname, port);
 }
