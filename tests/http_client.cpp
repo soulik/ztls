@@ -9,6 +9,8 @@
 #include <condition_variable>
 #include <atomic>
 #include <vector>
+#include <memory.h>
+#include <cstdarg>
 
 using namespace std;
 
