@@ -2,6 +2,7 @@
 #define ZTLS_H
 
 #include <stdint.h>
+#include <stddef.h>
 
 #if (BUILDING_ZTLS || ztls_EXPORTS) && HAVE_VISIBILITY
 #define ZTLS_DLL_EXPORTED __attribute__((visibility("default")))

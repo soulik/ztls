@@ -10,6 +10,8 @@
 #include <functional>
 #include <atomic>
 #include <thread>
+#include <memory.h>
+#include <cstdarg>
 
 #include <mbedtls/ctr_drbg.h>
 #include <mbedtls/ssl.h>
