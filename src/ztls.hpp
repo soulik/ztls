@@ -16,7 +16,7 @@
 extern "C" ZTLS_DLL_EXPORTED  void * ztls_client_new(const char * endpoint_out, const char * endpoint_control = nullptr);
 extern "C" ZTLS_DLL_EXPORTED  void * ztls_client_new_with_ctx(void * zmq_context, const char * endpoint_out, const char * endpoint_control = nullptr);
 extern "C" ZTLS_DLL_EXPORTED  bool ztls_client_CA_chain(void * state, const char * buffer, size_t len);
-extern "C" ZTLS_DLL_EXPORTED  bool ztls_client_connect(void * state, const char * hostname, uint16_t port);
+extern "C" ZTLS_DLL_EXPORTED  bool ztls_client_connect(void * state, const char * hostname, uint16_t port, int debug_level = 0);
 extern "C" ZTLS_DLL_EXPORTED  bool ztls_client_close(void * state);
 extern "C" ZTLS_DLL_EXPORTED  bool ztls_client_destroy(void * state);
 

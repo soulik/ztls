@@ -15,12 +15,12 @@ void * ztls_client_new_with_ctx(void * zmq_context, const char * endpoint_out, c
 	return new ztls_client_state(zmq_context, endpoint_out, endpoint_control);
 }
 
-bool ztls_client_connect(void * _state, const char * hostname, uint16_t port){
+bool ztls_client_connect(void * _state, const char * hostname, uint16_t port, int debug_level){
 	assert(_state);
 	assert(hostname);
 	assert(port > 0);
 	ztls_client_state * state = reinterpret_cast<ztls_client_state*>(_state);
-	return state->connect(hostname, port);
+	return state->connect(hostname, port, debug_level);
 }
 
 bool ztls_client_close(void * _state){

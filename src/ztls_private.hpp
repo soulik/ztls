@@ -3,6 +3,7 @@
 
 #include <zmq.h>
 
+#include <iostream>
 #include <cassert>
 #include <string>
 #include <vector>
@@ -89,6 +90,10 @@ namespace ztls {
 		bool hasEnough(size_t length){
 			return (pos >= length);
 		}
+
+		size_t available(){
+			return pos;
+		}
 	};
 
 	class tls_client {
@@ -110,13 +115,15 @@ namespace ztls {
 
 		bool strict_crt;
 	public:
-		tls_client(mbedtls_ssl_send_t send_cb, mbedtls_ssl_recv_t recv_cb, mbedtls_ssl_recv_timeout_t recv_timeout_cb, void * context_data);
-		tls_client(mbedtls_ssl_send_t send_cb, mbedtls_ssl_recv_t recv_cb, mbedtls_ssl_recv_timeout_t recv_timeout_cb, void * context_data, function<int(int rc)> assert_tls_fn);
+		tls_client(mbedtls_ssl_send_t send_cb, mbedtls_ssl_recv_t recv_cb, mbedtls_ssl_recv_timeout_t recv_timeout_cb, void * context_data, int debug_level = 0);
+		tls_client(mbedtls_ssl_send_t send_cb, mbedtls_ssl_recv_t recv_cb, mbedtls_ssl_recv_timeout_t recv_timeout_cb, void * context_data, int debug_level, function<int(int rc)> assert_tls_fn);
 		~tls_client();
 		int read(char * buffer, size_t length);
 		int write(const char * buffer, size_t length);
 		int set_CA_chain(const char * buffer, size_t length);
 		bool setup(const string & hostname);
+		size_t get_bytes_avail();
+		void close();
 
 		inline int handshake();
 		int debug_level;
@@ -135,12 +142,17 @@ namespace ztls {
 
 		//ZeroMQ part
 		void * zmq_context;
+		void * zmq_context_tls;
 		void * zmq_socket_in;
 		void * zmq_socket_out;
 		void * zmq_socket_control;
 		zmq_pollitem_t zmq_poll_in;
 		zmq_pollitem_t zmq_poll_out;
 		zmq_pollitem_t zmq_poll_control;
+
+		zmq_pollitem_t transport_poll_in[2];
+		zmq_pollitem_t transport_poll_out[2];
+
 		string client_id;
 
 		SimpleBuffer * input_buffer;
@@ -159,14 +171,14 @@ namespace ztls {
 
 		void process_transport();
 		int assert_tls(int rc);
-
 	public:
 		ztls_client_state(const char * endpoint_out, const char * endpoint_control = nullptr);
 		ztls_client_state(void * zmq_context, const char * endpoint_out, const char * endpoint_control= nullptr);
 		~ztls_client_state();
 
-		bool connect(const string & hostname, uint16_t port);
+		bool connect(const string & hostname, uint16_t port, int debug_level = 0);
 		void close();
+		void tls_close();
 		bool set_CA(const char * buffer, size_t len);
 	};
 
@@ -187,6 +199,9 @@ namespace ztls {
 		assert(rc == 0);
 		memcpy(zmq_msg_data(&msg), data, len);
 		rc = zmq_msg_send(&msg, socket, ZMQ_SNDMORE);
+		if (rc < 0){
+			cout << "zmq_msg_send: " << zmq_strerror(zmq_errno());
+		}
 		assert(rc >= 0);
 		zmq_msg_close(&msg);
 		return rc;

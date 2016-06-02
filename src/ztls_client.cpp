@@ -18,10 +18,10 @@ namespace ztls {
 		fflush((FILE *)ctx);
 	}
 
-	tls_client::tls_client(mbedtls_ssl_send_t send_cb, mbedtls_ssl_recv_t recv_cb, mbedtls_ssl_recv_timeout_t recv_timeout_cb, void * context_data, function<int(int rc)> assert_tls_fn){
+	tls_client::tls_client(mbedtls_ssl_send_t send_cb, mbedtls_ssl_recv_t recv_cb, mbedtls_ssl_recv_timeout_t recv_timeout_cb, void * context_data, int debug_level, function<int(int rc)> assert_tls_fn){
 		strict_crt = false;
 		assert_tls = assert_tls_fn;
-		debug_level = 0;
+		this->debug_level = debug_level;
 		seed = "ztls_test";
 		mbedtls_ctr_drbg_init(&CTRDBG_context);
 		mbedtls_entropy_init(&entropy_context);
@@ -50,8 +50,8 @@ namespace ztls {
 		mbedtls_ssl_set_timer_cb(&SSL_context, &timing_delay_context, mbedtls_timing_set_delay, mbedtls_timing_get_delay);
 	}
 
-	tls_client::tls_client(mbedtls_ssl_send_t send_cb, mbedtls_ssl_recv_t recv_cb, mbedtls_ssl_recv_timeout_t recv_timeout_cb, void * context_data)
-		: tls_client(send_cb, recv_cb, recv_timeout_cb, context_data, default_assert_tls){
+	tls_client::tls_client(mbedtls_ssl_send_t send_cb, mbedtls_ssl_recv_t recv_cb, mbedtls_ssl_recv_timeout_t recv_timeout_cb, void * context_data, int debug_level)
+		: tls_client(send_cb, recv_cb, recv_timeout_cb, context_data, debug_level, default_assert_tls){
 	}
 
 	tls_client::~tls_client(){
@@ -92,6 +92,10 @@ namespace ztls {
 		return mbedtls_ssl_write(&SSL_context, reinterpret_cast<const unsigned char*>(buffer), length);
 	}
 
+	size_t tls_client::get_bytes_avail(){
+		return mbedtls_ssl_get_bytes_avail(&SSL_context);
+	}
+
 	int tls_client::set_CA_chain(const char * buffer, size_t length){
 		if ((length > 0) && buffer){
 			int rc = assert_tls(mbedtls_x509_crt_parse(&CA_cert, reinterpret_cast<const unsigned char*>(buffer), length));
@@ -105,11 +109,16 @@ namespace ztls {
 		}
 	}
 
+	void tls_client::close(){
+		mbedtls_ssl_close_notify(&SSL_context);
+	}
+
 
 	ztls_client_state::ztls_client_state(void * zmq_context, const char * endpoint_out, const char * endpoint_control){
 		assert(endpoint_out != nullptr);
 
 		this->zmq_context = zmq_context;
+		this->zmq_context_tls = zmq_ctx_new();
 		own_zmq_context = false;
 		this->endpoint_out = endpoint_out;
 
@@ -121,23 +130,39 @@ namespace ztls {
 		memset(&zmq_poll_out, 0, sizeof(zmq_pollitem_t));
 		memset(&zmq_poll_control, 0, sizeof(zmq_pollitem_t));
 
-		zmq_socket_in = zmq_socket(zmq_context, ZMQ_STREAM);
+		memset(transport_poll_in, 0, sizeof(zmq_pollitem_t)*2);
+		memset(transport_poll_out, 0, sizeof(zmq_pollitem_t)*2);
+
+		zmq_socket_in = zmq_socket(zmq_context_tls, ZMQ_STREAM);
 		zmq_socket_out = zmq_socket(zmq_context, ZMQ_PAIR);
 
 		assert(zmq_socket_in);
 		assert(zmq_socket_out);
-
+		
 		int linger = ZTLS_MAX_LINGER;
-		int rc = zmq_setsockopt(zmq_socket_in, ZMQ_LINGER, &linger, sizeof(linger));
-		assert(rc == 0);
-		rc = zmq_setsockopt(zmq_socket_out, ZMQ_LINGER, &linger, sizeof(linger));
-		assert(rc == 0);
+		int IPv6_support = 1;
+		int rc;
+		{
+
+			rc = zmq_setsockopt(zmq_socket_in, ZMQ_LINGER, &linger, sizeof(linger));
+			assert(rc == 0);
+
+			rc = zmq_setsockopt(zmq_socket_out, ZMQ_LINGER, &linger, sizeof(linger));
+			assert(rc == 0);
+
+			rc = zmq_setsockopt(zmq_socket_in, ZMQ_IPV6, &IPv6_support, sizeof(IPv6_support));
+			assert(rc == 0);
+		}
 
 		if (endpoint_control){
 			zmq_socket_control = zmq_socket(zmq_context, ZMQ_PAIR);
 			assert(zmq_socket_control);
-			rc = zmq_setsockopt(zmq_socket_control, ZMQ_LINGER, &linger, sizeof(linger));
-			assert(rc == 0);
+
+			{
+				rc = zmq_setsockopt(zmq_socket_control, ZMQ_LINGER, &linger, sizeof(linger));
+				assert(rc == 0);
+			}
+
 			rc = zmq_bind(zmq_socket_control, endpoint_control);
 			assert(rc == 0);
 
@@ -152,6 +177,16 @@ namespace ztls {
 		zmq_poll_in.events = ZMQ_POLLIN;
 		zmq_poll_out.socket = zmq_socket_out;
 		zmq_poll_out.events = ZMQ_POLLIN;
+
+		transport_poll_in[0].socket = zmq_socket_in;
+		transport_poll_in[0].events = ZMQ_POLLIN;
+		transport_poll_in[1].socket = zmq_socket_out;
+		transport_poll_in[1].events = ZMQ_POLLOUT;
+
+		transport_poll_out[0].socket = zmq_socket_in;
+		transport_poll_out[0].events = ZMQ_POLLOUT;
+		transport_poll_out[1].socket = zmq_socket_out;
+		transport_poll_out[1].events = ZMQ_POLLIN;
 	}
 
 	ztls_client_state::ztls_client_state(const char * endpoint_out, const char * endpoint_control){
@@ -166,18 +201,24 @@ namespace ztls {
 		
 		if (zmq_socket_control){
 			zmq_close(zmq_socket_control);
+			zmq_socket_control = nullptr;
 		}
 
 		zmq_close(zmq_socket_out);
+		zmq_socket_out = nullptr;
 		zmq_close(zmq_socket_in);
+		zmq_socket_in = nullptr;
 
-		if (own_zmq_context){
+		if (zmq_context_tls){
+			zmq_ctx_term(zmq_context_tls);
+		}
+		if (own_zmq_context && zmq_context){
 			zmq_ctx_term(zmq_context);
 		}
 		delete input_buffer;
 	}
 
-	bool ztls_client_state::connect(const string & hostname, uint16_t port){
+	bool ztls_client_state::connect(const string & hostname, uint16_t port, int debug_level){
 		if (tls_state){
 			close();
 		}
@@ -194,7 +235,7 @@ namespace ztls {
 		}
 
 		if (connection_state == ztls_connection_state::ZTLS_CONNECTED){
-			tls_state = new tls_client(send_cb, recv_cb, recv_timeout_cb, this, bind(&ztls_client_state::assert_tls, this, placeholders::_1));
+			tls_state = new tls_client(send_cb, recv_cb, recv_timeout_cb, this, debug_level, bind(&ztls_client_state::assert_tls, this, placeholders::_1));
 
 			tls_state->setup(hostname);
 			
@@ -202,15 +243,33 @@ namespace ztls {
 				close();
 				return false;
 			}{
-				int rc = zmq_bind(zmq_socket_out, endpoint_out.c_str());
-				assert(rc == 0);
-				transport_running = true;
-				data_transport = thread([&](){
+				data_transport = thread([&, endpoint](){
+					int rc = zmq_bind(zmq_socket_out, endpoint_out.c_str());
+					assert(rc == 0);
+					transport_running = true;
+					connection_state = ztls_connection_state::ZTLS_READY;
+
 					while (transport_running){
 						process_transport();
 					}
+
+					rc = zmq_disconnect(zmq_socket_in, endpoint.c_str());
+					if (rc != 0){
+						int err = zmq_errno();
+						if (err != ETERM){
+							cout << "unbind: " << zmq_strerror(err) << " (" << err << ")\n";
+						}
+					}
+					rc = zmq_unbind(zmq_socket_out, endpoint_out.c_str());
+					if (rc != 0){
+						int err = zmq_errno();
+						if (err != ETERM){
+							cout << "unbind: " << zmq_strerror(err) << " (" << err << ")\n";
+						}
+					}
+					//assert(rc == 0);
 				});
-				connection_state = ztls_connection_state::ZTLS_READY;
+
 				return true;
 			}
 		}
@@ -220,15 +279,23 @@ namespace ztls {
 	}
 
 	void ztls_client_state::close(){
-		if (connection_state == ztls_connection_state::ZTLS_READY){
+		if ((connection_state == ztls_connection_state::ZTLS_READY) || transport_running){
 			transport_running = false;
 			if (data_transport.joinable()){
 				data_transport.join();
 			}
 		}
 		if (connection_state != ztls_connection_state::ZTLS_DISCONNECTED){
-			send_data_more(zmq_socket_in, client_id.c_str(), client_id.length());
-			send_data(zmq_socket_in, nullptr, 0);
+			/*
+			//check if the host is still up and running, send the "close" message if that's the case
+			zmq_poll_in.socket = zmq_socket_in;
+			zmq_poll_in.events = ZMQ_POLLOUT;
+			int result = zmq_poll(&zmq_poll_in, 1, 500);
+			if ((result > 0) && (zmq_poll_in.revents & ZMQ_POLLOUT)){
+				send_data_more(zmq_socket_in, client_id.c_str(), client_id.length());
+				send_data(zmq_socket_in, nullptr, 0);
+			}
+			*/
 		}
 
 		if (tls_state){
@@ -238,9 +305,18 @@ namespace ztls {
 		connection_state = ztls_connection_state::ZTLS_DISCONNECTED;
 	}
 
+	void ztls_client_state::tls_close(){
+		tls_state->close();
+	}
+
 	inline bool ztls_client_state::dataOnInput(uint32_t t){
 		zmq_poll_in.events = ZMQ_POLLIN;
-		return (zmq_poll(&zmq_poll_in, 1, t) > 0);
+		if (zmq_poll(&zmq_poll_in, 1, t) > 0){
+			return (zmq_poll_in.revents & ZMQ_POLLIN);
+		}
+		else{
+			return false;
+		}
 	}
 
 	bool ztls_client_state::process_state_change(){
@@ -278,7 +354,7 @@ namespace ztls {
 		ztls_client_state * state = reinterpret_cast<ztls_client_state*>(context_data);
 		if (state->connection_state & (ztls_connection_state::ZTLS_CONNECTED | ztls_connection_state::ZTLS_READY)){
 			state->zmq_poll_in.events = ZMQ_POLLOUT;
-			int result = zmq_poll(&state->zmq_poll_in, 1, 2000);
+			int result = zmq_poll(&state->zmq_poll_in, 1, -1);
 
 			if (result > 0){
 				send_data_more(state->zmq_poll_in.socket, state->client_id.c_str(), state->client_id.length());
@@ -286,7 +362,8 @@ namespace ztls {
 			}
 			else if (result == -1){
 				if (zmq_errno() == ETERM){
-					return EOF;
+					state->connection_state = ztls_connection_state::ZTLS_DISCONNECTED;
+					return 0;
 				}
 				else{
 					return -1;
@@ -326,8 +403,7 @@ namespace ztls {
 							return (state->input_buffer->push(reinterpret_cast<char*>(data), length)) ? 1 : -1;
 						}
 						else if (rc == 0){
-							state->connection_state = ztls_connection_state::ZTLS_DISCONNECTED;
-							return EOF;
+							return 0;
 						}
 						else{
 							return 0;
@@ -336,7 +412,8 @@ namespace ztls {
 
 					//server connection state change
 					if (rc == 0){
-						return EOF;
+						state->connection_state = ztls_connection_state::ZTLS_DISCONNECTED;
+						return 0;
 					}
 					else if (rc < 0){
 						//buffer is full!
@@ -375,40 +452,54 @@ namespace ztls {
 	}
 
 	void ztls_client_state::process_transport(){
-		zmq_poll_out.events = ZMQ_POLLIN | ZMQ_POLLOUT;
+		int result = 0;
 
-		int result = zmq_poll(&zmq_poll_out, 1, -1);
-		if (result > 0){
-			if (zmq_poll_out.revents & ZMQ_POLLIN){
-				int rc = recv_data(zmq_poll_out.socket, [&](char * data, size_t length) -> int{
-					int rc = 0;
-					do {
-						rc = tls_state->write(data, length);
-					} while ((rc == MBEDTLS_ERR_SSL_WANT_READ) || (rc == MBEDTLS_ERR_SSL_WANT_WRITE));
-
-					return rc;
-				});
+		//request to server
+		result = zmq_poll(transport_poll_out, 2, -1);
+		if ((result >= 2) && (transport_poll_out[0].revents & ZMQ_POLLOUT) && (transport_poll_out[1].revents & ZMQ_POLLIN)){
+			int rc = recv_data(transport_poll_out[1].socket, [&](char * data, size_t length) -> int{
+				int rc = 0;
+				do {
+					rc = tls_state->write(data, length);
+				} while ((rc == MBEDTLS_ERR_SSL_WANT_READ) || (rc == MBEDTLS_ERR_SSL_WANT_WRITE));
+				return rc;
+			});
+		} else if (result == -1){
+			int err = zmq_errno();
+			if (err == ETERM){
+				transport_running = false;
 			}
+		}
 
-			if (zmq_poll_out.revents & ZMQ_POLLOUT){
-				if (dataOnInput(0))
-				{
-					int rc = 0;
-					char buffer[ZTLS_INPUT_BUFFER_SIZE];
+		//reply from server
+		size_t bytes_avail = input_buffer->available();
+		result = zmq_poll(transport_poll_in, 2, -1);
 
-					do{
-						rc = tls_state->read(buffer, ZTLS_INPUT_BUFFER_SIZE);
-					} while ((rc == MBEDTLS_ERR_SSL_WANT_READ) || (rc == MBEDTLS_ERR_SSL_WANT_WRITE));
+		if (
+			((result >= 2) && (transport_poll_in[0].revents & ZMQ_POLLIN) && (transport_poll_in[1].revents & ZMQ_POLLOUT))
+			|| (bytes_avail>0)
+		){
+			int rc = 0;
+			char buffer[ZTLS_INPUT_BUFFER_SIZE];
 
-					if (rc > 0){
-						send_data(zmq_poll_out.socket, buffer, rc);
-					}
-					else{
-						if (rc == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY){
-							return;
-						}
-					}
+			//size_t bytes_avail = 0;
+
+			do{
+				rc = tls_state->read(buffer, ZTLS_INPUT_BUFFER_SIZE);
+			} while ((rc == MBEDTLS_ERR_SSL_WANT_READ) || (rc == MBEDTLS_ERR_SSL_WANT_WRITE));
+
+			if (rc > 0){
+				send_data(transport_poll_in[1].socket, buffer, rc);
+			}
+			else{
+				if (rc == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY){
+					return;
 				}
+			}
+		} else if (result == -1){
+			int err = zmq_errno();
+			if (err == ETERM){
+				transport_running = false;
 			}
 		}
 		return;
