@@ -37,12 +37,21 @@ using namespace std;
 
 namespace ztls {
 	inline string sprintf_ex(const string & fmt, ...){
+/*
 		va_list args;
 		va_start(args, fmt);
 		vector<char> buf(vsnprintf(nullptr, 0, fmt.c_str(), args));
 		vsnprintf(buf.data(), buf.size(), fmt.c_str(), args);
 		va_end(args);
 		return string(buf.data(), buf.size());
+*/
+		va_list args;
+		va_start(args, fmt);
+		const char * fmt0 = fmt.c_str();
+		char buffer0[ZTLS_ERROR_MESSAGE_SIZE];
+		vsnprintf(buffer0, ZTLS_ERROR_MESSAGE_SIZE, fmt0, args);
+		va_end(args);
+		return string(buffer0);
 	}
 
 	class SimpleBuffer {

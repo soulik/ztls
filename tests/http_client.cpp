@@ -15,12 +15,13 @@
 using namespace std;
 
 inline string sprintf_ex(const string & fmt, ...){
-	va_list args;
-	va_start(args, fmt);
-	vector<char> buf(vsnprintf(nullptr, 0, fmt.c_str(), args)); // note +1 for null terminator
-	vsnprintf(buf.data(), buf.size(), fmt.c_str(), args);
-	va_end(args);
-	return string(buf.data(), buf.size());
+		va_list args;
+		va_start(args, fmt);
+		const char * fmt0 = fmt.c_str();
+		char buffer0[4096];
+		vsnprintf(buffer0, 4096, fmt0, args);
+		va_end(args);
+		return string(buffer0);
 }
 
 inline int send_data(void * socket, const void * data, size_t len){
